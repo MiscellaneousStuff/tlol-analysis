@@ -1,4 +1,6 @@
-# Assumptions
+# TLoL Dataset Analysis (Patch 13.23: Ezreal 60k)
+
+## Assumptions
 
 - Up to 3 min
   - Minion names are restricted to only those which appear in the
@@ -8,7 +10,7 @@
   to implement. Ranged champs are easier and if active spell gets
   correctly implemented will become trivial to implement)
 
-# Issues
+## Issues
 
 - Auto attack inference from missiles is unreliable, especially at 16x replay speed.
   - Not all auto attacks are being correctly scraped (probably needs to be 2x or 4x at most :/).
@@ -16,7 +18,7 @@
     and allow for much higher throughput.
   - In summary: current detected auto attacks have high true postive accuracy but have low recall.
 
-# Conversion Considerations
+## Conversion Considerations
 
 - When encoding labels across an entire dataset during bulk conversion for ML datasets, the indexing
   of the embeddings needs to be consistent. There are two ways to achieve this:
