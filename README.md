@@ -17,6 +17,9 @@
     Or activespell needs to be correctly fixed within T_T-Pandoras-Box. This would be far more reliable
     and allow for much higher throughput.
   - In summary: current detected auto attacks have high true postive accuracy but have low recall.
+- Ezreal Q Spell Usage
+  - Discretised aim of the spell is problematic. Only covers +/- 400 units but ezreal q range is 1100 units.
+    This means that the more fine tuned aiming of the spell is just off. This extends also to the W as well.
 
 ## Conversion Considerations
 
@@ -30,3 +33,9 @@
      for that particular string type (like missile name) and then index into that custom list of strings.
      This also works but need to be careful during builk conversion run time. As long as it's kept consistent
      this is also fine and works.
+
+# Data Verification Results
+
+- Auto attack distances between Ezreal and targets are often much higher than AA range, this indicates
+  either a post-processing data handling bug, or something during runtime when scraping? Much more likely
+  to be in the post-process data handling part though.
