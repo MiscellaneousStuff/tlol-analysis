@@ -74,14 +74,17 @@ def find_aa_target(row, auto_attacks_df):
     target_x, target_z = row["pos_x"], row["pos_z"]
     
     # For each champ pos, check against missile positions
+    # print("auto_attacks_df.shape:", auto_attacks_df.shape)
     for _, aa in auto_attacks_df.iterrows():
         end_pos_x, end_pos_z = aa["end_pos_x"], aa["end_pos_z"]
         if target_x == end_pos_x and target_z == end_pos_z:
+            print("FOUND AA TARGET")
             return True
     return False
 
 def remove_empty(lst):
-    return [x for x in lst if x]
+    return [x for x in lst] # Actually allow for empty names as some missiles have none
+    # return [x for x in lst if x]
 
 def get_names(DB_REPLAYS_DIR):
     if not os.path.exists("NAMES.pkl"):
@@ -148,3 +151,29 @@ def get_names(DB_REPLAYS_DIR):
             NAMES = pickle.load(f)
 
     return NAMES
+
+def get_target_idx(row, original_df, target_type):
+    global printed
+    """
+    For each minion (or any other obj) associated with an auto [row]:
+    - Find all of the minions (or other obj) associated with that timestep
+    - Find out the relative distance idx for that minion (or other obj) and return it
+    """
+    objects_at_timestep = original_df[original_df["time"] == row["time"]]
+    objects_at_timestep = objects_at_timestep.sort_values(by="distance_from_player", ascending=[True])
+
+    row_x_y              = row[["pos_x", "pos_z"]]
+    objs_at_timestep_pos = objects_at_timestep[["pos_x", "pos_z"]]
+    objs_at_timestep_pos = objs_at_timestep_pos.reset_index(drop=True)
+    
+    target_idx_lst           = objs_at_timestep_pos[
+        (row_x_y["pos_x"] == objs_at_timestep_pos["pos_x"]) & \
+        (row_x_y["pos_z"] == objs_at_timestep_pos["pos_z"])]
+    if not target_idx_lst.empty:
+        target_idx = target_idx_lst.index[0] - objs_at_timestep_pos.index[0]
+    else:
+        target_idx = -1  # or some default value
+
+    time = row["time"]    
+    out = pd.Series(data=[time, target_idx, target_type], index=["time", "target_idx", "target_type"])
+    return out

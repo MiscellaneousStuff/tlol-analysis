@@ -8,7 +8,7 @@ Anivia
 Annie
 Aphelios
 Ashe
-Aurelion Sol
+AurelionSol
 Azir
 Bard
 Bel'Veth
@@ -46,7 +46,7 @@ Illaoi
 Irelia
 Ivern
 Janna
-Jarvan IV
+JarvanIV
 Jax
 Jayce
 Jhin
@@ -66,7 +66,7 @@ Kindred
 Kled
 Kog'Maw
 LeBlanc
-Lee Sin
+LeeSin
 Leona
 Lillia
 Lissandra
@@ -76,9 +76,9 @@ Lux
 Malphite
 Malzahar
 Maokai
-Master Yi
+MasterYi
 Milio
-Miss Fortune
+MissFortune
 Mordekaiser
 Morgana
 Naafiri
@@ -102,7 +102,7 @@ Rakan
 Rammus
 Rek'Sai
 Rell
-Renata Glasc
+Renata
 Renekton
 Rengar
 Riven
@@ -125,7 +125,7 @@ Soraka
 Swain
 Sylas
 Syndra
-Tahm Kench
+TahmKench
 Taliyah
 Talon
 Taric
@@ -134,7 +134,7 @@ Thresh
 Tristana
 Trundle
 Tryndamere
-Twisted Fate
+TwistedFate
 Twitch
 Udyr
 Urgot
@@ -152,7 +152,7 @@ Warwick
 Wukong
 Xayah
 Xerath
-Xin Zhao
+XinZhao
 Yasuo
 Yone
 Yorick
@@ -164,3 +164,4 @@ Ziggs
 Zilean
 Zoe
 Zyra
+Turret

@@ -1,9 +1,17 @@
+"""
+Change list:
+- Normalisation
+- Auto attacks
+- Player movement
+"""
+
 import os
 import sqlite3
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import time
+import concurrent.futures
 
 from lib import *
 
@@ -16,6 +24,7 @@ NAMES = get_names(DB_REPLAYS_DIR)
 AUTO_ATTACK_TARGETS = ["CHAMPS", "TURRETS", "MINIONS", "MISSILES", "MONSTERS", "OTHER"]
 GAME_OBJECT_LIST    = ["champs", "turrets", "minions", "missiles", "monsters"]
 MAX_OBJS            = [10, 30, 30, 30, 30]
+MAX_WORKERS         = 1
 
 def dataframe_preprocessing(
         replay_db_path,
@@ -30,19 +39,13 @@ def dataframe_preprocessing(
     MINION_NAMES        = list(NAMES["MINION_NAMES"])
     TURRET_NAMES        = list(NAMES["TURRET_NAMES"])
     MONSTER_NAMES       = list(NAMES["MONSTER_NAMES"])
-    
+
     # Load dataframes
     con = sqlite3.connect(replay_db_path)
     df_s = {
         obj:pd.read_sql(f"SELECT * FROM {obj};", con)\
             .drop(labels=["game_id"], axis=1) for obj in GAME_OBJECT_LIST}
 
-    # Save pre-normalised positions
-    champ_pos    = df_s["champs"][["time", "pos_x", "pos_z"]]
-    turrets_pos  = df_s["turrets"][["time", "pos_x", "pos_z"]]
-    monsters_pos = df_s["monsters"][["time", "pos_x", "pos_z"]]
-    minions_pos  = df_s["minions"][["time", "pos_x", "pos_z"]]
-    
     # Clean `missiles_df`
     df_s["missiles"] = df_s["missiles"].drop(labels=["name", "src_idx", "dst_idx"], axis=1)
 
@@ -89,7 +92,7 @@ def dataframe_preprocessing(
     df_s["champs"].loc[df_s["champs"]['d_cd'] < 0, 'd_cd'] = 0
     df_s["champs"].loc[df_s["champs"]['f_cd'] < 0, 'f_cd'] = 0
 
-    return df_s, con, champ_pos, turrets_pos, monsters_pos, minions_pos
+    return df_s, con
     
 def build_obs(
         df_s,
@@ -129,6 +132,13 @@ def build_obs(
     for obj in GAME_OBJECT_LIST:
         df_s[obj] = add_distances(df_s[obj], player_df)
 
+    # Save pre-normalised positions
+    champ_pos    = df_s["champs"].drop_duplicates(subset=["time", "pos_x", "pos_z"])
+    turrets_pos  = df_s["turrets"].drop_duplicates(subset=["time", "pos_x", "pos_z"])
+    monsters_pos = df_s["monsters"].drop_duplicates(subset=["time", "pos_x", "pos_z"])
+    minions_pos  = df_s["minions"].drop_duplicates(subset=["time", "pos_x", "pos_z"])
+
+    for obj in GAME_OBJECT_LIST:
         col_list = obj if obj in COLUMNS_TO_SCALE.keys() else "other"
         cols_to_scale = COLUMNS_TO_SCALE[col_list]  # Columns to be scaled
 
@@ -170,7 +180,14 @@ def build_obs(
         columns=replay_df_cols)
     replay_df_save_time = replay_df["time"]
 
-    return replay_df_save_time, player_df, replay_df
+    return \
+        replay_df_save_time, \
+        player_df, \
+        replay_df, \
+        champ_pos, \
+        turrets_pos, \
+        monsters_pos, \
+        minions_pos
 
 def build_act(
         replay_df,
@@ -191,10 +208,10 @@ def build_act(
 
     # Movement
     player_cur_pos  = player_df[["time", "pos_x", "pos_z"]]
-    player_next_pos = player_df[["time", "pos_x", "pos_z"]].shift(1)
+    player_next_pos = player_df[["time", "pos_x", "pos_z"]].shift(+1)
     player_next_pos = player_next_pos.fillna(0)
-    player_x_delta  = player_next_pos["pos_x"] - player_cur_pos["pos_x"]
-    player_z_delta  = player_next_pos["pos_z"] - player_cur_pos["pos_z"]
+    player_x_delta  = player_cur_pos["pos_x"] - player_next_pos["pos_x"]
+    player_z_delta  = player_cur_pos["pos_z"] - player_next_pos["pos_z"]
     player_x_delta.iloc[0] = 0
     player_z_delta.iloc[0] = 0
     player_x_delta_digit = (player_x_delta / 100).round().clip(-4, +4)
@@ -309,6 +326,10 @@ def build_act(
     auto_attacks_df = pd.read_sql("SELECT * FROM missiles WHERE spell_name LIKE 'EzrealBasicAttack%';", con)
     auto_attacks_df = auto_attacks_df.drop_duplicates(subset=["start_pos_x", "start_pos_z"])
 
+    df_s["champs"]["time"]   = replay_df_save_time
+    df_s["turrets"]["time"]  = replay_df_save_time
+    df_s["monsters"]["time"] = replay_df_save_time
+    df_s["minions"]["time"]  = replay_df_save_time
     champ_pos_df    = champ_pos.drop_duplicates(subset=["pos_x", "pos_z"])
     turrets_pos_df  = turrets_pos.drop_duplicates(subset=["pos_x", "pos_z"])
     monsters_pos_df = monsters_pos.drop_duplicates(subset=["pos_x", "pos_z"])
@@ -318,18 +339,28 @@ def build_act(
     turrets_found_aa  = turrets_pos_df.apply(lambda r: find_aa_target(r, auto_attacks_df), axis=1)
     monsters_found_aa = monsters_pos_df.apply(lambda r: find_aa_target(r, auto_attacks_df), axis=1)
     minions_found_aa  = minions_pos_df.apply(lambda r: find_aa_target(r, auto_attacks_df), axis=1)
+
+    # print("champ_pos_df.iloc[:, 0:10]:", champ_pos_df.iloc[:, 0:10])
+    print("champ_found_aa.sum(), turrets_found_aa.sum(), monsters_found_aa.sum(), minions_found_aa.sum():", champ_found_aa.sum(), turrets_found_aa.sum(), monsters_found_aa.sum(), minions_found_aa.sum())
+
     champ_autos    = champ_pos_df.loc[champ_found_aa[champ_found_aa].index][["time", "pos_x", "pos_z"]]
     turrets_autos  = turrets_pos_df.loc[turrets_found_aa[turrets_found_aa].index][["time", "pos_x", "pos_z"]]
     monsters_autos = monsters_pos_df.loc[monsters_found_aa[monsters_found_aa].index][["time", "pos_x", "pos_z"]]
     minions_autos  = minions_pos_df.loc[minions_found_aa[minions_found_aa].index][["time", "pos_x", "pos_z"]]
-    champ_autos["auto_type"]    = "champ"
-    turrets_autos["auto_type"]  = "turret"
-    monsters_autos["auto_type"] = "monster"
-    minions_autos["auto_type"]  = "minion"
-    all_autos_cols = ["time", "auto_digit_x", "auto_digit_z", "target_type"]
-    all_autos_vals = np.vstack((champ_autos, turrets_autos, monsters_autos, minions_autos))
+
+    all_autos_vals = pd.concat([
+        champ_autos.apply(lambda row: get_target_idx(
+            row, champ_pos_df, AUTO_TARGET_TYPES.index("champ")), axis=1), #[["time"]],
+        turrets_autos.apply(lambda row: get_target_idx(
+            row, turrets_pos_df, AUTO_TARGET_TYPES.index("turret")), axis=1), #[["time"]],
+        monsters_autos.apply(lambda row: get_target_idx(
+            row, monsters_pos_df, AUTO_TARGET_TYPES.index("monster")), axis=1), #[["time"]],
+        minions_autos.apply(lambda row: get_target_idx(
+            row, minions_pos_df, AUTO_TARGET_TYPES.index("minion")), axis=1) # [["time"]]
+    ])
+
+    all_autos_cols = ["time", "target_idx", "target_type"]
     all_autos_df   = pd.DataFrame(data=all_autos_vals, columns=all_autos_cols)
-    all_autos_df["target_type"]   = all_autos_df["target_type"].apply(lambda d: AUTO_TARGET_TYPES.index(d))
     all_autos_df["using_auto"] = 1
     replay_df = pd.merge(replay_df, all_autos_df, on="time", how="left")
     replay_df["using_auto"] = replay_df["using_auto"].fillna(0)
@@ -348,15 +379,16 @@ def convert_db_to_np(replay_db_path, NAMES, GAME_OBJECT_LIST, MAX_OBJS, out_path
     monsters_scaler = MinMaxScaler(feature_range=(0, 1))
 
     # Preprocess dataframes
-    df_s, \
-    con, \
+    df_s, con = dataframe_preprocessing(replay_db_path, NAMES, GAME_OBJECT_LIST)
+
+    # Get observation
+    replay_df_save_time, \
+    player_df, \
+    replay_df, \
     champ_pos, \
     turrets_pos, \
     monsters_pos, \
-    minions_pos = dataframe_preprocessing(replay_db_path, NAMES, GAME_OBJECT_LIST)
-
-    # Get observation
-    replay_df_save_time, player_df, replay_df = build_obs(
+    minions_pos = build_obs(
         df_s,
         NAMES,
         GAME_OBJECT_LIST,
@@ -381,25 +413,39 @@ def convert_db_to_np(replay_db_path, NAMES, GAME_OBJECT_LIST, MAX_OBJS, out_path
         minions_pos)
 
     # Save pandas and float16 `replay_df`
-    replay_df.to_csv(f"{out_path}.csv")
     replay_df = replay_df.astype(np.float16)
+    replay_df.to_csv(f"{out_path}.csv")
     np.save(f"{out_path}", replay_df)
 
-if __name__ == "__main__":
-    REPLAY_LIST = DB_REPLAYS[0:10]
-    for i, replay_db_path in enumerate(REPLAY_LIST):
-        s = time.time()
-        full_path = os.path.join(DB_REPLAYS_DIR, replay_db_path)
-        out_path  = os.path.join(NUMPY_REPLAYS_DIR, replay_db_path.replace(".db", ""))
+def go(replay_db_path):
+    s = time.time()
+    full_path = os.path.join(DB_REPLAYS_DIR, replay_db_path)
+    out_path  = os.path.join(NUMPY_REPLAYS_DIR, replay_db_path.replace(".db", ""))
 
-        print(f"Replay: {i+1}/{len(REPLAY_LIST)} := {full_path}")
-        convert_db_to_np(
-            full_path,
-            NAMES,
-            GAME_OBJECT_LIST,
-            MAX_OBJS,
-            out_path)
-        
-        e = time.time() - s
-        print("Converting replay tm:", e)
-        break
+    convert_db_to_np(
+        full_path,
+        NAMES,
+        GAME_OBJECT_LIST,
+        MAX_OBJS,
+        out_path)
+    
+    e = time.time() - s
+    print("Converting replay tm:", e)
+
+if __name__ == "__main__":
+    REPLAY_LIST = DB_REPLAYS
+    i = 1
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_to_summoner_name = (executor.submit(
+            go,
+            replay_db_path
+        ) for replay_db_path in REPLAY_LIST)
+        for future in concurrent.futures.as_completed(future_to_summoner_name):
+            try:
+                data = future.result()
+            except Exception as exc:
+                data = str(type(exc))
+                print("ERR:", data)
+            finally:
+                print(f"Replay: {i+1}/{len(REPLAY_LIST)}")
+                i += 1

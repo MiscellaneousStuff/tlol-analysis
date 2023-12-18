@@ -164,3 +164,4 @@ cython_debug/
 NAMES.pkl
 *.db
 *.csv
+*.npy
