@@ -15,8 +15,8 @@ import concurrent.futures
 
 from lib import *
 
-DB_REPLAYS_DIR = "/Users/joe/Downloads/DB"
-NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP"
+DB_REPLAYS_DIR = "/Users/joe/Downloads/DB-2"
+NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP-2"
 DB_REPLAYS = os.listdir(DB_REPLAYS_DIR)
 
 NAMES = get_names(DB_REPLAYS_DIR)
@@ -24,7 +24,9 @@ NAMES = get_names(DB_REPLAYS_DIR)
 AUTO_ATTACK_TARGETS = ["CHAMPS", "TURRETS", "MINIONS", "MISSILES", "MONSTERS", "OTHER"]
 GAME_OBJECT_LIST    = ["champs", "turrets", "minions", "missiles", "monsters"]
 MAX_OBJS            = [10, 30, 30, 30, 30]
-MAX_WORKERS         = 1
+MAX_WORKERS         = 4
+MIN_IDX             = 0
+MAX_IDX             = 1000
 
 def dataframe_preprocessing(
         replay_db_path,
@@ -414,7 +416,7 @@ def convert_db_to_np(replay_db_path, NAMES, GAME_OBJECT_LIST, MAX_OBJS, out_path
 
     # Save pandas and float16 `replay_df`
     replay_df = replay_df.astype(np.float16)
-    replay_df.to_csv(f"{out_path}.csv")
+    # replay_df.to_csv(f"{out_path}.csv")
     np.save(f"{out_path}", replay_df)
 
 def go(replay_db_path):
@@ -433,13 +435,20 @@ def go(replay_db_path):
     print("Converting replay tm:", e)
 
 if __name__ == "__main__":
-    REPLAY_LIST = DB_REPLAYS
+    REPLAY_LIST = DB_REPLAYS[MIN_IDX:MAX_IDX]
+    REPLAY_LIST = [fi.replace(".db", "") for fi in REPLAY_LIST]
+    EXISTING = os.listdir(NUMPY_REPLAYS_DIR)
+    EXISTING = [fi.replace(".npy", "") for fi in EXISTING]
+
+    REMAINING = list(set(REPLAY_LIST) - set(EXISTING))
+    REMAINING = [f"{fi}.db" for fi in REMAINING]
+
     i = 1
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_summoner_name = (executor.submit(
             go,
             replay_db_path
-        ) for replay_db_path in REPLAY_LIST)
+        ) for replay_db_path in REMAINING)
         for future in concurrent.futures.as_completed(future_to_summoner_name):
             try:
                 data = future.result()
@@ -447,5 +456,5 @@ if __name__ == "__main__":
                 data = str(type(exc))
                 print("ERR:", data)
             finally:
-                print(f"Replay: {i+1}/{len(REPLAY_LIST)}")
+                print(f"Replay: {i+1}/{len(REMAINING)}")
                 i += 1
