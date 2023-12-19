@@ -1,7 +1,3 @@
-import warnings
-warnings.filterwarnings('ignore')
-
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -11,6 +7,9 @@ import torch.nn as nn
 import numpy as np
 import random
 import torch.nn.functional as F
+
+import warnings
+warnings.filterwarnings('ignore')
 
 def set_all_seeds(seed):
     # Python's built-in random module
@@ -80,78 +79,87 @@ def collate_fn(batch):
 
     return obs_tensor, x_target_tensor, y_target_tensor
 
-dataset = TLoLDataset("/Users/joe/Downloads/NP")
-batch_size = 1  # You can adjust this
-dataloader = DataLoader(
-    dataset,
-    batch_size=batch_size,
-    shuffle=False,
-    collate_fn=collate_fn)
+def train(correct, total, accuracies, optimizer, obs, act):
+    # obs, act = dataset[game]
+    optimizer.zero_grad()
 
-print("dataset")
-obs, act = dataset[0]
-# x_target = torch.tensor(act.iloc[:, 0:1].values, dtype=torch.long) + 4
-# y_target = torch.tensor(act.iloc[:, 1:2].values, dtype=torch.long) + 4
+    obs_vals = obs.iloc[0:100, :].values
+    np.random.shuffle(obs_vals)
+    x = torch.tensor(obs_vals, dtype=torch.float32)
+    m_x, m_y = model(x)
+    
+    x_target = torch.tensor(act.iloc[0:100, 0:1].values, dtype=torch.long) + 4
+    y_target = torch.tensor(act.iloc[0:100, 1:2].values, dtype=torch.long) + 4
+    
+    # Compute the loss for each axis
+    loss_x = criterion(m_x, x_target.squeeze(-1))  # Ensure the target is correctly squeezed
+    loss_y = criterion(m_y, y_target.squeeze(-1))  # Ensure the target is correctly squeezed
+    
+    # Total loss
+    loss = loss_x + loss_y
+    loss.backward()
+    optimizer.step()
+    losses.append(loss.item())
 
-model = Model(in_dim=obs.shape[1], hidden_dim=512)
-# lr := 1e-3, dim=128, acc=72.50%
+    _, predicted_x = torch.max(m_x.data, 1)
+    _, predicted_y = torch.max(m_y.data, 1)
+    total += x_target.size(0)
+    correct += (predicted_x == x_target.squeeze(-1)).sum().item()
+    correct += (predicted_y == y_target.squeeze(-1)).sum().item()
 
-epochs = 100
+    # Multiply total by 2 as we have two predictions per sample (x and y)
+    accuracy = 100 * correct / (2 * total)  
+    accuracies.append(accuracy)
 
-lr = 1e-3
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    return loss, accuracy, accuracies, correct, total
 
-losses = []
-accuracies = []
+if __name__ == "__main__":
+    dataset = TLoLDataset("/Users/joe/Downloads/NP")
+    batch_size = 1  # You can adjust this
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_fn)
 
-for epoch in range(epochs):
-    correct = 0
-    total = 0
-    i = 1
-    for i, game in enumerate(range(1)):
-    # for obs, act in dataloader:
-        print(f"Game {i}/{1000}")
-        
-        # obs, act = dataset[game]
-        
-        optimizer.zero_grad()
+    print("dataset")
+    obs, act = dataset[0]
+    # x_target = torch.tensor(act.iloc[:, 0:1].values, dtype=torch.long) + 4
+    # y_target = torch.tensor(act.iloc[:, 1:2].values, dtype=torch.long) + 4
 
-        obs_vals = obs.iloc[0:100, :].values
-        np.random.shuffle(obs_vals)
-        x = torch.tensor(obs_vals, dtype=torch.float32)
-        m_x, m_y = model(x)
-        
-        x_target = torch.tensor(act.iloc[0:100, 0:1].values, dtype=torch.long) + 4
-        y_target = torch.tensor(act.iloc[0:100, 1:2].values, dtype=torch.long) + 4
-        
-        # Compute the loss for each axis
-        loss_x = criterion(m_x, x_target.squeeze(-1))  # Ensure the target is correctly squeezed
-        loss_y = criterion(m_y, y_target.squeeze(-1))  # Ensure the target is correctly squeezed
-        
-        # Total loss
-        loss = loss_x + loss_y
-        loss.backward()
-        optimizer.step()
-        losses.append(loss.item())
+    model = Model(in_dim=obs.shape[1], hidden_dim=128)
+    # lr := 1e-3, dim=128, acc=72.50%
 
-        _, predicted_x = torch.max(m_x.data, 1)
-        _, predicted_y = torch.max(m_y.data, 1)
-        total += x_target.size(0)
-        correct += (predicted_x == x_target.squeeze(-1)).sum().item()
-        correct += (predicted_y == y_target.squeeze(-1)).sum().item()
+    epochs = 10
 
-        # Multiply total by 2 as we have two predictions per sample (x and y)
-        accuracy = 100 * correct / (2 * total)  
-        accuracies.append(accuracy)
+    lr = 1e-4
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        i += 1
+    losses = []
+    accuracies = []
 
-    if epoch % 1 == 0:
-        print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}, Acc: {accuracy:.2f}%")
+    MAX_IDX = 100
 
-plt.plot(losses)
-plt.show()
+    for epoch in range(epochs):
+        correct = 0
+        total = 0
+        i = 1
+        for i, game in enumerate(range(MAX_IDX)):
+        # for obs, act in dataloader:
+            print(f"Game {i}/{MAX_IDX}")
+            
+            obs, act = dataset[game]
+            loss, accuracy, accuracies, correct, total = \
+                train(correct, total, accuracies, optimizer, obs, act)
 
-plt.plot(accuracies)
-plt.show()
+            i += 1
+
+        if epoch % MAX_IDX//10 == 0:
+            print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}, Acc: {accuracy:.2f}%")
+    
+    plt.plot(losses)
+    plt.show()
+
+    plt.plot(accuracies)
+    plt.show()
