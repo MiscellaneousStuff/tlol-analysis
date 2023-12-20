@@ -60,13 +60,16 @@ class Model(nn.Module):
     def __init__(self, in_dim, hidden_dim):
         super().__init__()
         self.fc1 = nn.Linear(in_dim, in_dim // 2)
-        self.fc2 = nn.Linear(in_dim // 2, hidden_dim)
+        self.fc2 = nn.Linear(in_dim // 2, in_dim // 2)
+        self.fc3 = nn.Linear(in_dim // 2, hidden_dim)
         self.move_x = nn.Linear(hidden_dim, 9)
         self.move_y = nn.Linear(hidden_dim, 9)
     def forward(self, x):
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
         x = F.relu(x)
         m_x = self.move_x(x)
         m_y = self.move_y(x)
@@ -122,11 +125,11 @@ def train(correct, total, accuracies, optimizer, obs, act, ROW_MAX, COL_MAX):
     return loss, accuracy, accuracies, correct, total
 
 if __name__ == "__main__":
-    MAX_IDX = 10
-    ROW_MAX = 1
-    COL_MAX = 1
+    MAX_IDX = 200 # 992 replays max
+    ROW_MAX = 300
+    COL_MAX = 200
 
-    dataset = TLoLDataset("/Users/joe/Downloads/NP-3")
+    dataset = TLoLDataset("/Users/joe/Downloads/NP-2")
     batch_size = 1  # You can adjust this
     dataloader = DataLoader(
         dataset,
@@ -140,7 +143,7 @@ if __name__ == "__main__":
     # x_target = torch.tensor(act.iloc[:, 0:1].values, dtype=torch.long) + 4
     # y_target = torch.tensor(act.iloc[:, 1:2].values, dtype=torch.long) + 4
 
-    model = Model(in_dim=obs.shape[1], hidden_dim=256)
+    model = Model(in_dim=obs.shape[1], hidden_dim=32)
     # lr := 1e-3, dim=128, acc=72.50%
 
     epochs = 1000

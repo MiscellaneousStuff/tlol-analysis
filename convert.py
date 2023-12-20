@@ -16,7 +16,7 @@ import concurrent.futures
 from lib import *
 
 DB_REPLAYS_DIR = "/Users/joe/Downloads/DB-2"
-NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP-3"
+NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP-2"
 DB_REPLAYS = os.listdir(DB_REPLAYS_DIR)
 
 NAMES = get_names(DB_REPLAYS_DIR)
@@ -24,9 +24,9 @@ NAMES = get_names(DB_REPLAYS_DIR)
 AUTO_ATTACK_TARGETS = ["CHAMPS", "TURRETS", "MINIONS", "MISSILES", "MONSTERS", "OTHER"]
 GAME_OBJECT_LIST    = ["champs", "turrets", "minions", "missiles", "monsters"]
 MAX_OBJS            = [10, 30, 30, 30, 30]
-MAX_WORKERS         = 1
+MAX_WORKERS         = 4
 MIN_IDX             = 0
-MAX_IDX             = 10
+MAX_IDX             = 10000
 
 def dataframe_preprocessing(
         replay_db_path,
@@ -443,6 +443,8 @@ if __name__ == "__main__":
     REMAINING = list(set(REPLAY_LIST) - set(EXISTING))
     REMAINING = [f"{fi}.db" for fi in REMAINING]
 
+    print(len(REPLAY_LIST), len(EXISTING), len(REMAINING))
+    
     i = 1
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_summoner_name = (executor.submit(
