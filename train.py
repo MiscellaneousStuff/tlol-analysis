@@ -40,12 +40,18 @@ class TLoLDataset(Dataset):
         self.files = os.listdir(dataset_dir)
         self.files = \
             [fi for fi in self.files
-             if ".csv" in fi]
+             if ".npy" in fi]
+        with open("cols.txt") as f:
+            self.cols = f.read().split("\n")
     def __len__(self):
         return len(self.files)
     def __getitem__(self, i):
         full_path = os.path.join(self.dataset_dir, self.files[i])
-        replay_df = pd.read_csv(full_path)
+        # print(full_path)
+        vals = np.load(full_path)
+        replay_df = pd.DataFrame(vals, columns=self.cols)
+        # print(replay_df.head())
+        # replay_df = pd.read_csv(full_path)
         obs = replay_df.iloc[:, :-17]
         act = replay_df.iloc[:, -17:]
         return obs, act
@@ -79,18 +85,20 @@ def collate_fn(batch):
 
     return obs_tensor, x_target_tensor, y_target_tensor
 
-def train(correct, total, accuracies, optimizer, obs, act):
+def train(correct, total, accuracies, optimizer, obs, act, ROW_MAX, COL_MAX):
     # obs, act = dataset[game]
     optimizer.zero_grad()
 
-    obs_vals = obs.iloc[0:100, :].values
+    obs_vals = obs.iloc[0:ROW_MAX, :COL_MAX].values
     np.random.shuffle(obs_vals)
     x = torch.tensor(obs_vals, dtype=torch.float32)
     m_x, m_y = model(x)
     
-    x_target = torch.tensor(act.iloc[0:100, 0:1].values, dtype=torch.long) + 4
-    y_target = torch.tensor(act.iloc[0:100, 1:2].values, dtype=torch.long) + 4
+    x_target = torch.tensor(act.iloc[0:ROW_MAX, 0:1].values, dtype=torch.long) + 4
+    y_target = torch.tensor(act.iloc[0:ROW_MAX, 1:2].values, dtype=torch.long) + 4
     
+    # print("obs_vals.shape, x_target.shape, y_target.shape:", obs_vals.shape, x_target.shape, y_target.shape)
+
     # Compute the loss for each axis
     loss_x = criterion(m_x, x_target.squeeze(-1))  # Ensure the target is correctly squeezed
     loss_y = criterion(m_y, y_target.squeeze(-1))  # Ensure the target is correctly squeezed
@@ -114,7 +122,11 @@ def train(correct, total, accuracies, optimizer, obs, act):
     return loss, accuracy, accuracies, correct, total
 
 if __name__ == "__main__":
-    dataset = TLoLDataset("/Users/joe/Downloads/NP")
+    MAX_IDX = 10
+    ROW_MAX = 1
+    COL_MAX = 1
+
+    dataset = TLoLDataset("/Users/joe/Downloads/NP-3")
     batch_size = 1  # You can adjust this
     dataloader = DataLoader(
         dataset,
@@ -124,38 +136,37 @@ if __name__ == "__main__":
 
     print("dataset")
     obs, act = dataset[0]
+    obs = obs.iloc[0:ROW_MAX, 0:COL_MAX]
     # x_target = torch.tensor(act.iloc[:, 0:1].values, dtype=torch.long) + 4
     # y_target = torch.tensor(act.iloc[:, 1:2].values, dtype=torch.long) + 4
 
-    model = Model(in_dim=obs.shape[1], hidden_dim=128)
+    model = Model(in_dim=obs.shape[1], hidden_dim=256)
     # lr := 1e-3, dim=128, acc=72.50%
 
-    epochs = 10
+    epochs = 1000
 
-    lr = 1e-4
+    lr = 1e-3
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     losses = []
     accuracies = []
 
-    MAX_IDX = 100
-
     for epoch in range(epochs):
         correct = 0
         total = 0
         i = 1
-        for i, game in enumerate(range(MAX_IDX)):
+        for game in range(MAX_IDX):
         # for obs, act in dataloader:
-            print(f"Game {i}/{MAX_IDX}")
+            # print(f"Game {i}/{MAX_IDX}")
             
             obs, act = dataset[game]
             loss, accuracy, accuracies, correct, total = \
-                train(correct, total, accuracies, optimizer, obs, act)
+                train(correct, total, accuracies, optimizer, obs, act, ROW_MAX, COL_MAX)
 
             i += 1
 
-        if epoch % MAX_IDX//10 == 0:
+        if epoch:
             print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}, Acc: {accuracy:.2f}%")
     
     plt.plot(losses)

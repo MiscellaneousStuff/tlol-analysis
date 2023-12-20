@@ -16,7 +16,7 @@ import concurrent.futures
 from lib import *
 
 DB_REPLAYS_DIR = "/Users/joe/Downloads/DB-2"
-NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP-2"
+NUMPY_REPLAYS_DIR = "/Users/joe/Downloads/NP-3"
 DB_REPLAYS = os.listdir(DB_REPLAYS_DIR)
 
 NAMES = get_names(DB_REPLAYS_DIR)
@@ -24,9 +24,9 @@ NAMES = get_names(DB_REPLAYS_DIR)
 AUTO_ATTACK_TARGETS = ["CHAMPS", "TURRETS", "MINIONS", "MISSILES", "MONSTERS", "OTHER"]
 GAME_OBJECT_LIST    = ["champs", "turrets", "minions", "missiles", "monsters"]
 MAX_OBJS            = [10, 30, 30, 30, 30]
-MAX_WORKERS         = 4
+MAX_WORKERS         = 1
 MIN_IDX             = 0
-MAX_IDX             = 1000
+MAX_IDX             = 10
 
 def dataframe_preprocessing(
         replay_db_path,
